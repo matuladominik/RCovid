@@ -1,5 +1,7 @@
 
 
+# functions ---------------------------------------------------------------
+
 library("tidyverse")
 library("gganimate")
 library("transformr")  # sf + gganimate needs this
@@ -8,6 +10,36 @@ library("tibbletime")  # because of rollify()
 
 source("data_utils.R")
 ggplot2::theme_set(ggplot2::theme_minimal())
+
+
+animate_me <- function(p, filename = NULL) {
+  
+  start_pause <- 1
+  end_pause <- 5
+  n_frames <- dplyr::n_distinct(p$data$date_reported)
+  duration <- start_pause + n_frames/2 + end_pause
+  
+  anim <- gganimate::animate(
+    plot = p, 
+    start_pause = start_pause, 
+    end_pause = end_pause, 
+    duration = duration, 
+    fps = 4, 
+    width = 800, 
+    height = 800
+  )
+  if (is.null(filename)) {
+    return(anim)
+  }
+  dir.create("gifs/", showWarnings = FALSE)
+  gganimate::anim_save(filename, anim, "gifs/")
+  
+  invisible(anim)
+}
+
+
+
+# data --------------------------------------------------------------------
 
 
 # get data
@@ -30,7 +62,11 @@ running_daily_stats <-
 
 # CASES reported by region and date
 
+caption_data_author <- "linkedin.com/in/dominik-matula\nDATA: bit.ly/2WRJaIL"
+min_date_reported <- "2020-03-01"
+
 running_daily_stats %>% 
+  filter(date_reported >= min_date_reported) %>% 
   ggplot(aes(x = date_reported, y = n_infected)) + 
   geom_histogram(stat = "identity", alpha = .3) + 
   geom_line(aes(y = rolling_mean_infected, col = "Moving avg (5 days window)"), size = 1) + 
@@ -39,87 +75,136 @@ running_daily_stats %>%
     x = "Date reported",
     y = "# infected",
     title = "Covid19: CASES reported by region",
-    col = NULL
+    col = NULL,
+    subtitle = str_c("Since ", min_date_reported),
+    caption = caption_data_author
   ) + 
   theme(legend.position = "bottom")
 
 
 
-# Gender percentage of infected (by date)
 
-p <- running_daily_stats %>% 
-  filter(date_reported >= "2020-03-15") %>% 
+# RELATIVE counts of Covid19-infected by region (CZE)
+
+p_relative_counts <- 
+  running_daily_stats %>% 
+  mutate(
+    running_count_per100k = running_count * 1e5 / popul
+  ) %>% 
+  filter(date_reported >= min_date_reported) %>% 
   ggplot() + 
-  geom_hline(yintercept = .5, linetype = "dashed", alpha = .6, col = "firebrick3", size = 1) + 
-  geom_point(aes(x = region_name, y=running_pct_male, size = running_count), stat = "identity") + 
+  geom_sf(aes(fill = running_count_per100k, geometry = geometry)) + 
+  scale_fill_gradient(low = "white", high = "firebrick") + 
+  scale_x_continuous(breaks = seq(10, 20, .5)) + 
+  labs(
+    title = as.expression(bquote(bold("Covid19") ~"- CASES per 100k ihabitans (CZE)")),
+    subtitle = "\nReported till: {frame_time}",
+    fill = "CASES per 100k ihabitans",
+    caption = caption_data_author
+  ) + 
+  theme(
+    legend.position = "bottom", 
+    legend.title.align = 1, 
+    legend.title = element_text(vjust = 0.7, lineheight = 1.1, size = 13),  
+    axis.text = element_blank(),
+    plot.caption = element_text(color = "gray50"),
+    plot.subtitle = element_text(lineheight = 1.1),
+  ) +
+  transition_time(date_reported)
+  
+anim <- animate_me(p_relative_counts, "relative_counts.gif")
+anim
+
+
+# GENDER percentage of infected (by date)
+
+overall_male_pct <- infected_people %>% pull(gender) %>% `==`("Male") %>% mean() %>% round(1)
+
+p_gender_of_cases <- 
+  running_daily_stats %>% 
+  filter(date_reported >= min_date_reported) %>% 
+  ggplot() + 
+  geom_hline(yintercept = overall_male_pct, linetype = "dashed", alpha = .6, col = "firebrick3", size = 1) + 
+  geom_point(aes(x = region_name, y = running_pct_male, size = running_count), stat = "identity") + 
   scale_y_continuous(breaks = seq(0, 1, .1), labels = scales::percent, limits = 0:1) + 
   labs(
     x = NULL,
     y = "% of male patients",
-    title = "Covid19 - Proportion of male patients, by region",
-    subtitle = "Date till: {frame_time}"
+    title = as.expression(bquote(bold("Covid19") ~"- GENDER of patients by region (CZE)")),
+    subtitle = "Proportion of male patients, by region\nReported till: {frame_time}"
   ) + 
   coord_flip() + 
   transition_time(date_reported)
 
-gganimate::animate(p, end_pause = 100, fps = 25, duration = 15, width=400, height=600)
+animate_me(p_gender_of_cases, NULL)
+
 
 
 # The same date, but plotted as a map
-
-running_daily_stats %>% 
-  filter(date_reported == "2020-03-15") %>% 
-  mutate(running_pct_male = ifelse(running_count < 10, NA, running_pct_male)) %>% 
-  ggplot() + 
-  geom_sf(aes(fill = running_pct_male, geometry = geometry)) + 
-  geom_sf_text(aes(geometry = label_pos, label = n_infected), size = 2.5)
-
-
-
 tol_min_cases <- 10
 info_text <- str_c("% of MALE patients, iff # CASES > ", tol_min_cases)
 
-p <- running_daily_stats %>% 
-  filter(date_reported >= "2020-03-01") %>% 
+p_map_gender <- running_daily_stats %>% 
+  filter(date_reported >= min_date_reported) %>% 
   mutate(running_pct_male = ifelse(running_count < tol_min_cases, NA, running_pct_male)) %>% 
   ggplot() + 
   geom_sf(aes(fill = running_pct_male, geometry = geometry)) + 
-  scale_fill_gradient2(low = "#E63900", mid = "gray85", high = "deepskyblue3", midpoint = 0.5, na.value = "#FFFFFF00", limits = c(0, 1), labels = scales::percent) + 
+  scale_fill_gradient2(low = "#E63900", mid = "gray85", high = "deepskyblue3", midpoint = overall_male_pct, na.value = "#FFFFFF00", limits = c(0, 1), labels = scales::percent) + 
+  scale_x_continuous(breaks = seq(10, 20, .5)) + 
   labs(
-    title = "Covid19: GENDER of patients by region (CZE)",
+    title = as.expression(bquote(bold("Covid19") ~"- GENDER of patients by region (CZE)")),
     subtitle = str_c(info_text, "\nReported till: {frame_time}"),
-    fill = info_text
+    fill = str_c(info_text,"\nMiddle: ", overall_male_pct, " (overall % male patients)"),
+    caption = caption_data_author
   ) + 
-  theme(legend.position = "bottom", legend.title.align = 1, axis.text = element_blank()) +
+  theme(
+    legend.position = "bottom", 
+    legend.title.align = 1, 
+    legend.title = element_text(vjust = 0.7, lineheight = 1.1, size = 13),  
+    axis.text = element_blank(),
+    plot.caption = element_text(color = "gray50"),
+    plot.subtitle = element_text(lineheight = 1.1),
+  ) + 
   transition_time(date_reported)
 
-gganimate::animate(p, end_pause = 10, fps = 5, duration = 10, width=600, height=400)
+anim <- animate_me(p_map_gender, "gender_of_infected.gif")
+anim
 
 
 
-# Age
+# AGE
 
-p <- 
+tol_min_cases <- 10
+info_text <- str_c("Average AGE of patients, iff # CASES > ", tol_min_cases)
+
+overall_mean_age <- infected_people %>% pull(age) %>% mean() %>% round(1)
+
+p_map_age <- 
   running_daily_stats %>% 
-  filter(date_reported >= "2020-03-01") %>% 
-  mutate(running_mean_age = ifelse(running_count <= 10, NA, running_mean_age)) %>% 
+  filter(date_reported >= min_date_reported) %>% 
+  mutate(running_mean_age = ifelse(running_count < tol_min_cases, NA, running_mean_age)) %>% 
   ggplot() + 
-  geom_sf(aes(fill = running_mean_age, geometry = geometry), col = "gray77") + 
+  geom_sf(aes(fill = running_mean_age, geometry = geometry), col = "gray33") + 
   # geom_sf_text(aes(geometry = label_pos, label = n_infected), size = 2.5) + 
-  scale_fill_gradient(low = "gray33", high = "firebrick", na.value = "#FFFFFF00") + 
+  scale_fill_gradient2(low = "goldenrod2", mid = "gray60", midpoint = overall_mean_age, high = "firebrick", na.value = "#FFFFFF00") + 
+  scale_x_continuous(breaks = seq(10, 20, .5)) + 
   labs(
-    title = "Covid19 - Average age of patients",
-    subtitle = "Reported till: {frame_time}",
-    fill = "Average age of patients\niff # CASES > 10"
+    title = as.expression(bquote(bold("Covid19") ~"- AGE of patients by region (CZE)")),
+    subtitle = str_c(info_text, "\nReported till: {frame_time}"),
+    fill = str_c(info_text,"\nMiddle: ", overall_mean_age, " (overall mean age)"),
+    caption = caption_data_author
   ) + 
-  theme(legend.position = "bottom", legend.title.align = 1, axis.text = element_blank()) +
+  theme(
+    legend.position = "bottom", 
+    legend.title.align = 1, 
+    legend.title = element_text(vjust = 0.7, lineheight = 1.1, size = 13),  
+    axis.text = element_blank(),
+    plot.caption = element_text(color = "gray50"),
+    plot.subtitle = element_text(lineheight = 1.1),
+  ) +
   transition_time(date_reported)
 
-gganimate::animate(p, end_pause = 10, fps = 5, duration = 10, width=600, height=400)
+anim <- animate_me(p_map_age, "age_of_infected.gif")
+anim
 
 
-
-
-# do dat je potřeba přidat 0
-# přidat info, že data nejsou k dispozici
-# přidat informaci o počtu nakažených (druhá osa y)
