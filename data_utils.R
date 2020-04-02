@@ -2,13 +2,13 @@
 
 # load Covid19 data -------------------------------------------------------
 
-is_outdated <- function(file_path, max_age_secs = 3600) {
+is_recent <- function(file_path, max_age_secs = 3600) {
   
   mtime <- file.mtime(file_path)
   now <- Sys.time()
   
   age_secs <- as.numeric(now - mtime, units = "secs")
-  age_secs > max_age_secs
+  age_secs < max_age_secs
 }
 
 
@@ -17,7 +17,7 @@ download_data_individuals <- function(url = "https://onemocneni-aktualne.mzcr.cz
   file_name <- base::basename(url)
   dest_path <- stringr::str_c("data/", file_name)
   
-  if (file.exists(dest_path) && is_outdated(dest_path)) {
+  if (file.exists(dest_path) && is_recent(dest_path)) {
     return(invisible(dest_path))
   }
   
@@ -134,6 +134,10 @@ prepare_daily_stats <- function(infected_people, since = "2020-03-01") {
     summarise(
       n_infected = n(),
       n_male = sum(gender == "Male"),
+      n_eldest60 = sum(age >= 60),
+      n_eldest65 = sum(age >= 65),
+      n_youth18 = sum(age <= 18),
+      n_youth30 = sum(age <= 30),
       sum_age = sum(age),
       n_infected_abroad = sum(infected_abroad)
     )
@@ -151,6 +155,14 @@ add_running_vars <- function(daily_stats) {
       running_mean_age = cumsum(sum_age)/running_count,
       running_pct_male = cumsum(n_male)/running_count,
       running_pct_infected_abroad = cumsum(n_infected_abroad)/running_count,
+      running_count_eldest60 = cumsum(n_eldest60),
+      running_count_eldest65 = cumsum(n_eldest65),
+      running_count_youth18 = cumsum(n_youth18),
+      running_count_youth30 = cumsum(n_youth30),
+      running_pct_eldest60 = running_count_eldest60/running_count,
+      running_pct_eldest65 = running_count_eldest65/running_count,
+      running_pct_youth18 = running_count_youth18/running_count,
+      running_pct_youth30 = running_count_youth30/running_count,
       rolling_mean_infected = rollify(mean, window = 5)(n_infected)
     ) %>% 
     select(date_reported, region, running_count, n_infected, everything())

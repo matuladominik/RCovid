@@ -16,7 +16,7 @@ ggplot2::theme_set(ggplot2::theme_minimal())
 animate_me <- function(p, filename = NULL) {
   
   start_pause <- 1
-  end_pause <- 5
+  end_pause <- 8
   n_frames <- dplyr::n_distinct(p$data$date_reported)
   duration <- start_pause + n_frames/2 + end_pause
   
@@ -210,6 +210,76 @@ anim
 
 
 
+# PROPORTION Age over 65
+
+tol_min_cases <- 10
+info_text <- str_c("Percentage of patients at age 65+, iff # CASES > ", tol_min_cases)
+
+p_map_eldest <- 
+  running_daily_stats %>% 
+  filter(date_reported >= Sys.Date() - 4*7) %>% 
+  mutate(running_pct_eldest = ifelse(running_count < tol_min_cases, NA, running_pct_eldest65)) %>% 
+  ggplot() + 
+  geom_sf(aes(fill = running_pct_eldest, geometry = geometry), col = "gray33") + 
+  scale_fill_gradient2(low = "white", mid = "goldenrod2", midpoint = .15, high = "firebrick", na.value = "#FFFFFF00", breaks = seq(0, 1, .05), labels = scales::percent) + 
+  scale_x_continuous(breaks = seq(10, 20, .5)) + 
+  labs(
+    title = as.expression(bquote(bold("Covid19  - Proportion of ELDER patients") ~" by region (CZE)")),
+    subtitle = str_c(info_text, "\nReported till: {frame_time}"),
+    fill = str_c(info_text,"\n"),
+    caption = caption_data_author
+  ) + 
+  theme(
+    legend.position = "bottom", 
+    legend.title.align = 1, 
+    legend.title = element_text(vjust = 0.7, lineheight = 1.1, size = 13),  
+    axis.text = element_blank(),
+    plot.caption = element_text(color = "gray40"),
+    plot.subtitle = element_text(lineheight = 1.1),
+  ) + guides(fill= guide_colorbar(barwidth = 14, draw.llim = TRUE, draw.ulim = FALSE)) +
+  transition_time(date_reported)
+
+anim <- animate_me(p_map_eldest, "elder_patients.gif")
+anim
+
+
+
+# COUNT Age over 65
+
+tol_min_cases <- 10
+info_text <- str_c("COUNT of patients at age 65+, iff # CASES > ", tol_min_cases)
+
+# ZDE BY TO CHTĚLO RELATIVNĚ NA POČET OBYVATEL...
+p_map_eldest_cnt <- 
+  running_daily_stats %>% 
+  filter(date_reported >= Sys.Date() - 4*7) %>% 
+  mutate(running_count_eldest = ifelse(running_count < tol_min_cases, NA, running_count_eldest65)) %>% 
+  ggplot() + 
+  geom_sf(aes(fill = running_count_eldest, geometry = geometry), col = "gray33") + 
+  scale_fill_gradient2(low = "goldenrod2", mid = "firebrick", high = "deeppink4", na.value = "#FFFFFF00", breaks = seq(0, 1e4, 25)) + 
+  scale_x_continuous(breaks = seq(10, 20, .5)) + 
+  labs(
+    title = as.expression(bquote(bold("Covid19  - Count of ELDER patients") ~" by region (CZE)")),
+    subtitle = str_c(info_text, "\nReported till: {frame_time}"),
+    fill = str_c(info_text,"\n"),
+    caption = caption_data_author
+  ) + 
+  theme(
+    legend.position = "bottom", 
+    legend.title.align = 1, 
+    legend.title = element_text(vjust = 0.7, lineheight = 1.1, size = 13),  
+    axis.text = element_blank(),
+    plot.caption = element_text(color = "gray40"),
+    plot.subtitle = element_text(lineheight = 1.1),
+  ) + guides(fill= guide_colorbar(barwidth = 14, draw.llim = TRUE, draw.ulim = FALSE)) +
+  transition_time(date_reported)
+
+anim <- animate_me(p_map_eldest_cnt, "elder_patients_count.gif")
+anim
+
+
+
+
 
 
 
@@ -239,7 +309,7 @@ selected_regions <-
     popul = first(popul)
   ) %>% 
   mutate(
-    region_col = ifelse(last_dens_ratio > 1, as.character(region_name_short), NA),
+    region_col = ifelse(last_dens_ratio > 1 | region_name_short == "ULK", as.character(region_name_short), NA),
     region_col = fct_reorder(region_col, popul, .desc = TRUE)
   )
 
@@ -255,13 +325,13 @@ p <-
   geom_text(data = . %>% filter(!is.na(region_col)), aes(x = last_date_reported + 0.3, label = region_col), hjust = 0, key_glyph = "point") + 
   scale_color_pomological(na.value = "gray77") + 
   scale_x_date(date_breaks = "week", date_labels = "%d/%m\nMon", minor_breaks = NULL) +
-  scale_y_continuous(labels = function(x) { str_c(x,"x")}) + 
+  scale_y_continuous(labels = function(x) { str_c(x,"x")}, minor_breaks = NULL) + 
   labs(
     x = "Time",
     y = "Ratio of CASES Density:  region / whole country",
     col = as.expression(bquote("Regions with currently" ~ italic(abnormal) ~ " density of Covid19 CASES")),
-    title = as.expression(bquote(bold("Covid19  -  Region density comparision") ~"(CZE)")),
-    subtitle = "Comparision of REGION density of patients to COUNTRY density \nReported till: {frame_along}",
+    title = as.expression(bquote(bold("Covid19  -  Region density comparison") ~"(CZE)")),
+    subtitle = "Comparison of REGION density of patients to COUNTRY density \nReported till: {frame_along}",
     caption = caption_data_author
   ) + 
   theme(
@@ -274,5 +344,5 @@ p <-
   ) + 
   transition_reveal(date_reported)
 
-animate_me(p, "regions_density.gif")  
-
+anim <- animate_me(p, "regions_density.gif")  
+anim
