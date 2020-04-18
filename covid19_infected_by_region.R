@@ -87,34 +87,36 @@ running_daily_stats %>%
 
 # RELATIVE counts of Covid19-infected by region (CZE)
 
-p_relative_counts <- 
-  running_daily_stats %>% 
-  mutate(
-    running_count_per100k = running_count * 1e5 / popul
-  ) %>% 
-  filter(date_reported >= min_date_reported) %>% 
-  ggplot() + 
-  geom_sf(aes(fill = running_count_per100k, geometry = geometry)) + 
-  scale_fill_gradient(low = "white", high = "firebrick") + 
-  scale_x_continuous(breaks = seq(10, 20, .5)) + 
-  labs(
-    title = as.expression(bquote(bold("Covid19") ~"- CASES per 100k ihabitans (CZE)")),
-    subtitle = "\nReported till: {frame_time}",
-    fill = "CASES per 100k ihabitans",
-    caption = caption_data_author
-  ) + 
-  theme(
-    legend.position = "bottom", 
-    legend.title.align = 1, 
-    legend.title = element_text(vjust = 0.7, lineheight = 1.1, size = 13),  
-    axis.text = element_blank(),
-    plot.caption = element_text(color = "gray50"),
-    plot.subtitle = element_text(lineheight = 1.1),
-  ) +
-  transition_time(date_reported)
-  
-anim <- animate_me(p_relative_counts, "relative_counts.gif")
-anim
+  p_relative_counts <- 
+    running_daily_stats %>% 
+    mutate(
+      running_count_per100k = running_count * 1e5 / popul
+    ) %>% 
+    filter(date_reported >= min_date_reported) %>% 
+    ggplot() + 
+    geom_sf(aes(fill = running_count_per100k, geometry = geometry)) + 
+    scale_fill_gradient(low = "white", high = "firebrick") + 
+    coord_sf(crs = st_crs(4326)) +
+    scale_x_continuous(breaks = seq(10, 20, .5)) +
+    labs(
+      title = as.expression(bquote(bold("Covid19") ~"- CASES per 100k inhabitans (CZE)")),
+      subtitle = "\nReported till: {frame_time}",
+      fill = "CASES per 100k ihabitans",
+      caption = caption_data_author
+    ) + 
+    theme(
+      legend.position = "bottom", 
+      legend.title.align = 1, 
+      legend.title = element_text(vjust = 0.7, lineheight = 1.1, size = 13),  
+      axis.text = element_blank(),
+      plot.caption = element_text(color = "gray50"),
+      plot.subtitle = element_text(lineheight = 1.1),
+    ) +
+    theme_void() +
+    transition_time(date_reported)
+    
+  anim <- animate_me(p_relative_counts, "relative_counts.gif")
+  anim
 
 
 # GENDER percentage of infected (by date)
